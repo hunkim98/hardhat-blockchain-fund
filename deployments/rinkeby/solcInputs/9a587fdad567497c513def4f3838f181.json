@@ -1,0 +1,39 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/FundMe.sol": {
+      "content": "// Get fund from users\n// Withdraw funds\n// set mimnimum funding value in USD\n\n//SPDX-License-Identifier: MIT\npragma solidity ^0.8.7;\n\nimport \"./PriceConverter.sol\";\n\ncontract FundMe {\n  using PriceConverter for uint256;\n\n  uint256 public minimumUsd = 1 * 1e18; //need to convert into ETH, need to interact with real word(external world)\n  //we need blockchain oracle for connected to external world!\n  address[] public funders;\n  mapping(address => uint256) public addressToAmountFunded; //record of how much amount the address sent\n\n  address public owner;\n\n  AggregatorV3Interface public priceFeed;\n\n  //prcefeed differs for network\n  constructor(address priceFeedAddress) {\n    //whoever deployed the project\n    priceFeed = AggregatorV3Interface(priceFeedAddress);\n    owner = msg.sender;\n  }\n\n  //payable keyword allows access to VALUE\n  function fund() public payable {\n    //we are allowed to do this due to having used using PriceConverter library\n    require(\n      msg.value.getConversionRate(priceFeed) >= minimumUsd,\n      \"Didn't sent enough\"\n    );\n    //setting minimum ETH paying value to 1eth\n    // require(getCon versionRate(msg.value)>=minimumUsd, \"Didn't sent enough\"); //1e18 = 1 * 10 ** 18 == 1eth (value in WEI)\n    //revert means canceling the transaction that was done just before and returns the gas payed in advance\n    //the decimal point is not specified 30000000000000 is actually 3000.0000000000ETH\n    funders.push(msg.sender); //record sender address\n    addressToAmountFunded[msg.sender] = msg.value;\n  }\n\n  //onlyOwner is like a decorator\n  function withdraw() public onlyOwner {\n    for (uint256 funderIndex = 0; funderIndex < funders.length; funderIndex++) {\n      address funder = funders[funderIndex];\n      addressToAmountFunded[funder] = 0;\n    }\n    funders = new address[](0); //0 means no objects in it\n\n    //payable(address) makes an address payable\n    //transfer(X) means give X to that address\n    // payable(msg.sender).transfer(address(this).balance)\n\n    //send returns a boolean onSuccess or on failure\n    // bool sendSuccess = payable(msg.sender).send(address(this).balance);\n    // require(sendSuccess, \"Send failed\"); //this makes revert enabled! the previous instruction is revoked\n\n    //call is the recommended way to send tokens!\n    (bool callSucess, ) = payable(msg.sender).call{\n      value: address(this).balance\n    }(\"\"); //in call parantheses we input a function, can be left empty with \"\n    require(callSucess, \"Call failed\");\n  }\n\n  modifier onlyOwner() {\n    require(msg.sender == owner, \"Sender is not owner!\");\n    //underbar means do the rest\n    _;\n  }\n\n  receive() external payable {\n    fund();\n  }\n\n  fallback() external payable {\n    fund();\n  }\n}\n"
+    },
+    "contracts/PriceConverter.sol": {
+      "content": "//creating a library\n//SPDX-License-Identifier: MIT\n\n//to use PriceConverter you must only test on Injected Web3 since this does not exist in Virtual Machine\nimport \"@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol\";\n\npragma solidity ^0.8.0;\n\nlibrary PriceConverter {\n  function getPrice(AggregatorV3Interface priceFeed)\n    public\n    view\n    returns (uint256)\n  {\n    //ABI\n    //Address \t0x8A753747A1Fa494EC906cE90E9f37563A8AF630e //docs.chain.link\n    (, int256 price, , , ) = priceFeed.latestRoundData(); //sort of destructuring, we extract price from it\n    return uint256(price * 1e10);\n  }\n\n  function getConversionRate(uint256 ethAmount, AggregatorV3Interface priceFeed)\n    internal\n    view\n    returns (uint256)\n  {\n    //finds eth worth in usd\n    uint256 ethPrice = getPrice(priceFeed); //has additional 18 decimal points\n    uint256 ethAmountInUsd = (ethPrice * ethAmount) / 1e18;\n    return ethAmountInUsd;\n  }\n}\n"
+    },
+    "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.0;\n\ninterface AggregatorV3Interface {\n  function decimals() external view returns (uint8);\n\n  function description() external view returns (string memory);\n\n  function version() external view returns (uint256);\n\n  // getRoundData and latestRoundData should both raise \"No data present\"\n  // if they do not have data to report, instead of returning unset values\n  // which could be misinterpreted as actual reported values.\n  function getRoundData(uint80 _roundId)\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n\n  function latestRoundData()\n    external\n    view\n    returns (\n      uint80 roundId,\n      int256 answer,\n      uint256 startedAt,\n      uint256 updatedAt,\n      uint80 answeredInRound\n    );\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": ["ast"]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
